@@ -13,23 +13,23 @@ import { getFoldingRanges } from '../services/jsonFolding';
 interface ExpectedIndentRange {
 	startLine: number;
 	endLine: number;
-	type?: string;
+	kind?: string;
 }
 
 function assertRanges(lines: string[], expected: ExpectedIndentRange[], nRanges?: number): void {
 	let document = TextDocument.create('test://foo/bar.json', 'json', 1, lines.join('\n'));
-	let actual = getFoldingRanges(document, { maxRanges: nRanges }).ranges;
+	let actual = getFoldingRanges(document, { rangeLimit: nRanges });
 
 	let actualRanges = [];
 	for (let i = 0; i < actual.length; i++) {
-		actualRanges[i] = r(actual[i].startLine, actual[i].endLine, actual[i].type);
+		actualRanges[i] = r(actual[i].startLine, actual[i].endLine, actual[i].kind);
 	}
 	actualRanges = actualRanges.sort((r1, r2) => r1.startLine - r2.startLine);
 	assert.deepEqual(actualRanges, expected);
 }
 
-function r(startLine: number, endLine: number, type?: string): ExpectedIndentRange {
-	return { startLine, endLine, type };
+function r(startLine: number, endLine: number, kind?: string): ExpectedIndentRange {
+	return { startLine, endLine, kind };
 }
 
 suite('JSON Folding', () => {
@@ -132,11 +132,11 @@ suite('JSON Folding', () => {
 		];
 		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(6, 7, 'array'), r(9, 10, 'array'), r(13, 14, 'array'), r(16, 17, 'array')], void 0);
 		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(6, 7, 'array'), r(9, 10, 'array'), r(13, 14, 'array'), r(16, 17, 'array')], 8);
-		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(13, 14, 'array'), r(16, 17, 'array')], 7);
+		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(6, 7, 'array'), r(13, 14, 'array'), r(16, 17, 'array')], 7);
 		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(13, 14, 'array'), r(16, 17, 'array')], 6);
-		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array')], 5);
-		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array')], 4);
-		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array')], 3);
+		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array'), r(13, 14, 'array')], 5);
+		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array'), r(5, 11, 'array')], 4);
+		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array'), r(2, 3, 'array')], 3);
 		assertRanges(input, [r(0, 19, 'array'), r(1, 18, 'array')], 2);
 		assertRanges(input, [r(0, 19, 'array')], 1);
 	});

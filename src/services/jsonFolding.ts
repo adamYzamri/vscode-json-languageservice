@@ -6,9 +6,9 @@
 
 import { TextDocument, Position } from 'vscode-languageserver-types';
 import { createScanner, SyntaxKind, ScanError } from 'jsonc-parser';
-import { FoldingRangeType, FoldingRange, FoldingRangeList } from '../jsonLanguageTypes';
+import { FoldingRangeKind, FoldingRange } from '../jsonLanguageTypes';
 
-export function getFoldingRanges(document: TextDocument, context?: { maxRanges?: number }) {
+export function getFoldingRanges(document: TextDocument, context?: { rangeLimit?: number }): FoldingRange[] {
 	let ranges: FoldingRange[] = [];
 	let nestingLevels: number[] = [];
 	let stack: FoldingRange[] = [];
@@ -26,14 +26,14 @@ export function getFoldingRanges(document: TextDocument, context?: { maxRanges?:
 			case SyntaxKind.OpenBraceToken:
 			case SyntaxKind.OpenBracketToken: {
 				let startLine = document.positionAt(scanner.getTokenOffset()).line;
-				let range = { startLine, endLine: startLine, type: token === SyntaxKind.OpenBraceToken ? 'object' : 'array' };
+				let range = { startLine, endLine: startLine, kind: token === SyntaxKind.OpenBraceToken ? 'object' : 'array' };
 				stack.push(range);
 				break;
 			}
 			case SyntaxKind.CloseBraceToken:
 			case SyntaxKind.CloseBracketToken: {
-				let type = token === SyntaxKind.CloseBraceToken ? 'object' : 'array';
-				if (stack.length > 0 && stack[stack.length - 1].type === type) {
+				let kind = token === SyntaxKind.CloseBraceToken ? 'object' : 'array';
+				if (stack.length > 0 && stack[stack.length - 1].kind === kind) {
 					let range = stack.pop();
 					let line = document.positionAt(scanner.getTokenOffset()).line;
 					if (range && line > range.startLine + 1 && prevStart !== range.startLine) {
@@ -52,7 +52,7 @@ export function getFoldingRanges(document: TextDocument, context?: { maxRanges?:
 					scanner.setPosition(document.offsetAt(Position.create(startLine + 1, 0)));
 				} else {
 					if (startLine < endLine) {
-						addRange({ startLine, endLine, type: FoldingRangeType.Comment });
+						addRange({ startLine, endLine, kind: FoldingRangeKind.Comment });
 						prevStart = startLine;
 					}
 				}
@@ -65,11 +65,11 @@ export function getFoldingRanges(document: TextDocument, context?: { maxRanges?:
 				if (m) {
 					let line = document.positionAt(scanner.getTokenOffset()).line;
 					if (m[1]) { // start pattern match
-						let range = { startLine: line, endLine: line, type: FoldingRangeType.Region };
+						let range = { startLine: line, endLine: line, kind: FoldingRangeKind.Region };
 						stack.push(range);
 					} else {
 						let i = stack.length - 1;
-						while (i >= 0 && stack[i].type !== FoldingRangeType.Region) {
+						while (i >= 0 && stack[i].kind !== FoldingRangeKind.Region) {
 							i--;
 						}
 						if (i >= 0) {
@@ -89,27 +89,36 @@ export function getFoldingRanges(document: TextDocument, context?: { maxRanges?:
 		}
 		token = scanner.scan();
 	}
-	let maxRanges = context && context.maxRanges;
-	if (typeof maxRanges === 'number' && ranges.length > maxRanges) {
-		let counts: number[] = [];
-		for (let level of nestingLevels) {
-			if (level < 30) {
-				counts[level] = (counts[level] || 0) + 1;
-			}
-		}
-		let entries = 0;
-		let maxLevel = 0;
-		for (let i = 0; i < counts.length; i++) {
-			let n = counts[i];
-			if (n) {
-				if (n + entries > maxRanges) {
-					maxLevel = i;
-					break;
-				}
-				entries += n;
-			}
-		}
-		ranges = ranges.filter((r, index) => nestingLevels[index] < maxLevel);
+	let rangeLimit = context && context.rangeLimit;
+	if (typeof rangeLimit !== 'number' || ranges.length <= rangeLimit) {
+		return ranges;
 	}
-	return <FoldingRangeList>{ ranges };
+	let counts: number[] = [];
+	for (let level of nestingLevels) {
+		if (level < 30) {
+			counts[level] = (counts[level] || 0) + 1;
+		}
+	}
+	let entries = 0;
+	let maxLevel = 0;
+	for (let i = 0; i < counts.length; i++) {
+		let n = counts[i];
+		if (n) {
+			if (n + entries > rangeLimit) {
+				maxLevel = i;
+				break;
+			}
+			entries += n;
+		}
+	}
+	let result = [];
+	for (let i = 0; i < ranges.length; i++) {
+		let level = nestingLevels[i];
+		if (typeof level === 'number') {
+			if (level < maxLevel || (level === maxLevel && entries++ < rangeLimit)) {
+				result.push(ranges[i]);
+			}
+		}
+	}
+	return result;
 }
